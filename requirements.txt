@@ -1,0 +1,7 @@
+sqlalchemy
+streamlit
+pandas
+langchain
+langchain_openai
+openai
+qdrant-client
