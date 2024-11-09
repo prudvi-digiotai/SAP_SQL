@@ -308,7 +308,7 @@ def process_file(
 
 def main():
     st.set_page_config(page_title="Enhanced RAG + SQL System", layout="wide")
-    st.title("Enhanced :blue[SQL Agentic] System")
+    st.title("Enhanced :blue[SQL with RAG Agentic] System")
     
     initialize_session_state()
     
