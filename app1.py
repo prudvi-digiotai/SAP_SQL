@@ -304,8 +304,6 @@ def process_file(
         db_manager.store_dataframe(file_path, if_exists='append')
     else:
         db_manager.store_dataframe(file_path, if_exists='replace')
-    
-    st.session_state.metadata = db_manager.get_metadata()
 
 
 def main():
@@ -323,6 +321,8 @@ def main():
         st.session_state.rag_system = RAGSystem(api_key, qdrant_url, qdrant_api)
     if 'db_manager' not in st.session_state:
         st.session_state.db_manager = DatabaseManager(database_url)
+
+    st.session_state.metadata = st.session_state.db_manager.get_metadata()
 
     # File upload section
     uploaded_files = st.file_uploader(
