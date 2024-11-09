@@ -1,9 +1,11 @@
+from datetime import datetime
 import os
+import io
 import logging
 from typing import List, Dict
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, inspect
 import streamlit as st
 import pandas as pd
 
@@ -23,17 +25,18 @@ class DatabaseManager:
         """Initialize database connection"""
         self.database_url = database_url
         self.engine = create_engine(database_url)
+        self.table_name = "excel_data"
         
     def store_dataframe(
         self, 
         file_path: str, 
-        table_name: str, 
         if_exists: str = 'append'
     ) -> None:
-        """Store DataFrame in database"""
+        """Store DataFrame in excel_data table"""
         try:
             df = pd.read_excel(file_path)
-            df.to_sql(table_name, self.engine, if_exists=if_exists, index=False)
+            df.to_sql(self.table_name, self.engine, if_exists=if_exists, index=False)
+            logger.info(f"Data stored successfully in {self.table_name}")
         except Exception as e:
             logger.error(f"Error storing DataFrame: {str(e)}")
             raise
@@ -42,65 +45,81 @@ class DatabaseManager:
         """Execute SQL query"""
         try:
             with self.engine.connect() as connection:
-                print(text(query))
                 result_set = connection.execute(text(query))
                 return [str(row) for row in result_set]
         except Exception as e:
             logger.error(f"Error executing query: {str(e)}")
             return str(e)
             
-    def get_metadata(self, tables: List[str]) -> List[Dict]:
-        """Get database metadata"""
-        metadata = []
+    def get_metadata(self) -> Dict:
+        """Get database metadata for excel_data table"""
         try:
-            for table in tables:
-                query_columns = f"""
-                    SELECT column_name, data_type
-                    FROM information_schema.columns
-                    WHERE table_name = '{table}';
-                """
-                columns = self.execute_query(query_columns)
-                metadata.append({table: {'columns': columns}})
-            return metadata
+            query_columns = f"""
+                SELECT column_name, data_type
+                FROM information_schema.columns
+                WHERE table_name = 'excel_data';
+            """
+            columns = self.execute_query(query_columns)
+            return {"excel_data": {'columns': columns}}
         except Exception as e:
             logger.error(f"Error getting metadata: {str(e)}")
             raise
+            
+    def download_data(self) -> bytes:
+        """Download all data from excel_data table as Excel file"""
+        try:
+            query = "SELECT * FROM excel_data"
+            df = pd.read_sql(query, self.engine)
+            
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='openpyxl') as writer:
+                df.to_excel(writer, index=False)
+            output.seek(0)
+            return output.getvalue()
+        except Exception as e:
+            logger.error(f"Error downloading data: {str(e)}")
+            raise
+            
+    def reset_database(self) -> None:
+        """Delete all records from excel_data table"""
+        try:
+            with self.engine.connect() as connection:
+                connection.execute(text("TRUNCATE TABLE excel_data CASCADE"))
+                connection.commit()
+            logger.info("Table excel_data reset successfully")
+        except Exception as e:
+            logger.error(f"Error resetting database: {str(e)}")
+            raise
+
+    def table_exists(self) -> bool:
+        """Check if excel_data table exists"""
+        try:
+            inspector = inspect(self.engine)
+            return "excel_data" in inspector.get_table_names()
+        except Exception as e:
+            logger.error(f"Error checking table existence: {str(e)}")
+            return False
 
 def initialize_session_state():
     """Initialize Streamlit session state variables"""
-    if 'collection_name' not in st.session_state:
-        st.session_state.collection_name = "excel-embeddings"
-    if 'tables' not in st.session_state:
-        st.session_state.tables = []
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if 'metadata' not in st.session_state:
         st.session_state.metadata = []
-    if 'authenticated_email' not in st.session_state:
-        st.session_state.authenticated_email = False
 
 def process_file(
     file_path: str,
-    # rag_system: RAGSystem,
     db_manager: DatabaseManager,
     question_col: str,
     answer_col: str
 ) -> None:
     """Process a single Excel file"""
-    table_name = "excel_data"
-    st.session_state.tables.append(table_name)
+    if db_manager.table_exists():
+        db_manager.store_dataframe(file_path, if_exists='append')
+    else:
+        db_manager.store_dataframe(file_path, if_exists='replace')
     
-    # df, texts = rag_system.extract_columns_from_excel(
-    #     str(file_path),
-    #     question_col,
-    #     answer_col
-    # )
-    
-    # embeddings = rag_system.get_embeddings(texts)
-    # df = rag_system.store_data(df, texts, embeddings)
-    db_manager.store_dataframe(file_path, table_name)
-    
-    st.session_state.metadata = db_manager.get_metadata(st.session_state.tables)
+    # st.session_state.metadata = db_manager.get_metadata()
 
 def main():
     st.set_page_config(page_title="Enhanced RAG + SQL + Email System", layout="wide")
@@ -112,26 +131,18 @@ def main():
     question_column = None
     answer_column = None
 
-    # Sidebar for system selection
-    # with st.sidebar:
-    #     st.title("System Configuration")
-    #     system_type = st.radio(
-    #         "Choose Processing Method",
-    #         ["Direct Upload", "Email Processing"]
-    #     )
+    from dotenv import load_dotenv
+    load_dotenv()
     
-    # Common credentials
-    # api_key = st.text_input("Enter OpenAI API key", type='password', key='api_key')
     api_key = os.getenv('OPENAI_API_KEY')
-    # database_url = st.text_input(
-    #     "Database URL",
-    #     "postgresql://test_owner:tcWI7unQ6REA@ep-yellow-recipe-a5fny139.us-east-2.aws.neon.tech:5432/test",
-    #     key='db_url'
-    # )
+
     database_url = os.getenv('DATABASE_URL')
 
-    # if system_type == "Direct Upload":
-        # Direct upload interface
+    if 'db_manager' not in st.session_state:
+        st.session_state.db_manager = DatabaseManager(database_url)
+    
+    st.session_state.metadata = st.session_state.db_manager.get_metadata()
+
     uploaded_files = st.file_uploader(
         "Upload Excel Files",
         type=["xlsx"],
@@ -139,27 +150,45 @@ def main():
         accept_multiple_files=True
     )
     
-    col1, col2 = st.columns(2)
-    # with col1:
-    #     question_column = st.text_input(
-    #         "Question column name",
-    #         key='question_column',
-    #         value='Request - Text Request'
-    #     )
-    # with col2:
-    #     answer_column = st.text_input(
-    #         "Answer column name",
-    #         key='answer_column',
-    #         value='Request - Text Answer'
-    #     )
     question_column = 'Request - Text Request'
     answer_column = 'Request - Text Answer'
+
+    # Database control buttons
+    col1, col2, col3 = st.columns([1, 1, 2])
     
-    if api_key and st.button("File Upload", key='process_files'):
-        if uploaded_files:
-            # rag_system = RAGSystem(api_key)
-            db_manager = DatabaseManager(database_url)
-            
+    with col1:
+        if st.button("Download Data"):
+            try:
+                if st.session_state.db_manager.table_exists():
+                    excel_data = st.session_state.db_manager.download_data()
+                    st.download_button(
+                        label="Click here to download",
+                        data=excel_data,
+                        file_name=f"excel_data_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        key='download_button'  
+                    )
+                else:
+                    st.warning("No data available to download.")
+            except Exception as e:
+                st.error(f"Error downloading data: {str(e)}")
+    
+    with col2:
+        if st.button("Reset Database"):
+            try:
+                if st.session_state.db_manager.table_exists():
+                    st.warning("This will delete all data. Are you sure?")
+                    if st.button("Confirm Reset", key='confirm_reset'):
+                        st.session_state.db_manager.reset_database()
+                        st.session_state.metadata = None
+                        st.success("Database reset successfully!")
+                else:
+                    st.warning("No data to reset.")
+            except Exception as e:
+                st.error(f"Error resetting database: {str(e)}")
+    
+    if uploaded_files and st.button("File Upload", key='process_files'):
+        if uploaded_files:            
             for uploaded_file in uploaded_files:
                 with st.spinner(f"Processing {uploaded_file.name}..."):
                     file_path = Path(uploaded_file.name)
@@ -168,8 +197,7 @@ def main():
                     
                     process_file(
                         str(file_path),
-                        # rag_system,
-                        db_manager,
+                        st.session_state.db_manager,
                         question_column,
                         answer_column
                     )
@@ -186,22 +214,30 @@ def main():
         
         # Initialize RAG tools and agent if not already done
         if 'memory' not in st.session_state:
-            st.session_state.memory = ConversationBufferWindowMemory(return_messages=True, memory_key='chat_history', input_key='input', k=5)
-        if 'llm' not in st.session_state:
-            st.session_state['llm'] = ChatOpenAI(model="gpt-4o-mini", temperature=0.7, api_key=api_key)
+            st.session_state.memory = ConversationBufferWindowMemory(
+                return_messages=True, 
+                memory_key='chat_history', 
+                input_key='input', 
+                k=5
+            )
 
-        
+        if 'llm' not in st.session_state:
+            st.session_state.llm = ChatOpenAI(
+                model="gpt-4o-mini", 
+                temperature=0.7, 
+                api_key=api_key
+            )
+
         if 'agent' not in st.session_state:
             tools = [
                 Tool(
                     name="execute_sql_query",
-                    func=DatabaseManager(database_url).execute_query,
+                    func=st.session_state.db_manager.execute_query,
                     description=(
                         "Tool for executing SQL queries on a structured database. "
                     )
                 )
-            ]
-            
+            ] 
             
             prompt = hub.pull("hwchase17/react-chat")
             prompt.template = """
@@ -288,19 +324,14 @@ def main():
                     
                     # Generate context for the agent
                     command = f"""
-                        Answer the queries from these tables:
-                        {st.session_state.tables}
-
-                        Metadata of the tables:
+                        Answer the queries from the excel_data table:
+                        Metadata of the table:
                         {st.session_state.metadata} 
 
                         User query: 
                         {query}
                     """
                     
-                    # Get response from agent
-                    # response = st.session_state.agent(command)
-                    # response = response.split('**Answer**:')[-1].strip()
                     response = st.session_state['agent_executor'].invoke({"input": command})
                     
                     # Store assistant message
