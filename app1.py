@@ -326,15 +326,19 @@ def main():
             except Exception as e:
                 st.error(f"Error downloading data: {str(e)}")
     
+    if "confirm_reset_triggered" not in st.session_state:
+        st.session_state.confirm_reset_triggered = False
+
+    # Reset database logic
     with col2:
         # Step 1: Initial "Reset Database" button
         if st.button("Reset Database"):
-            st.session_state.confirm_reset = True  # Set a flag to track reset request
+            st.session_state.confirm_reset_triggered = True  # Set the custom flag
             st.warning("This will delete all data. Are you sure?")
 
-        # Step 2: Only show "Confirm Reset" if "Reset Database" has been pressed
-        if st.session_state.get("confirm_reset"):
-            if st.button("Confirm Reset", key='confirm_reset'):
+        # Step 2: Display "Confirm Reset" button if reset has been triggered
+        if st.session_state.confirm_reset_triggered:
+            if st.button("Confirm Reset"):
                 try:
                     if st.session_state.db_manager.table_exists():
                         st.session_state.db_manager.reset_database()
@@ -345,7 +349,8 @@ def main():
                 except Exception as e:
                     st.error(f"Error resetting database: {str(e)}")
                 finally:
-                    st.session_state.confirm_reset = False  # Reset the flag after action
+                    # Reset the confirmation flag
+                    st.session_state.confirm_reset_triggered = False
 
     # Process uploaded files
     if uploaded_files and st.button("Process Files", key='process_files'):
