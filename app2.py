@@ -131,8 +131,8 @@ def main():
     question_column = None
     answer_column = None
 
-    from dotenv import load_dotenv
-    load_dotenv()
+    # from dotenv import load_dotenv
+    # load_dotenv()
     
     api_key = os.getenv('OPENAI_API_KEY')
 
