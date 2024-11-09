@@ -364,8 +364,8 @@ def main():
     # Reset database logic
     with col2:
         # Display current record count
-        current_count = st.session_state.db_manager.get_record_count()
-        st.write(f"Current records: {current_count}")
+        # current_count = st.session_state.db_manager.get_record_count()
+        # st.write(f"Current records: {current_count}")
         
         # First button toggles the reset_clicked state
         if not st.session_state.reset_clicked:
