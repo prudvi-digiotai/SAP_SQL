@@ -90,7 +90,7 @@ class DatabaseManager:
         """Delete all records from excel_data table"""
         try:
             with self.engine.connect() as connection:
-                connection.execute(text("TRUNCATE TABLE excel_data CASCADE")).execution_options(autocommit=True))
+                connection.execute(text("TRUNCATE TABLE excel_data CASCADE")).execution_options(autocommit=True)
                 connection.commit()
             logger.info("Table excel_data reset successfully")
         except Exception as e:
