@@ -6,3 +6,4 @@ langchain_openai
 openai
 qdrant-client
 psycopg2-binary
+openpyxl
