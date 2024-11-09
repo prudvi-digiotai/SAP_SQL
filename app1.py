@@ -584,6 +584,7 @@ def main():
                 
                 with st.chat_message("assistant"):
                     st.write(response['output'].strip())
+                    st.write(response)
         else:
             st.warning("Please enter a question.")
     
