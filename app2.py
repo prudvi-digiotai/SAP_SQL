@@ -84,12 +84,40 @@ class DatabaseManager:
         """Delete all records from excel_data table"""
         try:
             with self.engine.connect() as connection:
-                connection.execute(text("TRUNCATE TABLE excel_data CASCADE"))
+                # First verify we have data
+                result = connection.execute(text("SELECT COUNT(*) FROM excel_data"))
+                count_before = result.scalar()
+                logger.info(f"Records before reset: {count_before}")
+                
+                # Execute the truncate
+                connection.execute(text("TRUNCATE TABLE excel_data"))
                 connection.commit()
-            logger.info("Table excel_data reset successfully")
+                
+                # Verify the deletion
+                result = connection.execute(text("SELECT COUNT(*) FROM excel_data"))
+                count_after = result.scalar()
+                logger.info(f"Records after reset: {count_after}")
+                
+                if count_after == 0:
+                    logger.info("Table excel_data reset successfully")
+                    return True
+                else:
+                    logger.error("Table was not properly reset")
+                    return False
+                    
         except Exception as e:
             logger.error(f"Error resetting database: {str(e)}")
             raise
+            
+    def get_record_count(self) -> int:
+        """Get the current number of records in the table"""
+        try:
+            with self.engine.connect() as connection:
+                result = connection.execute(text("SELECT COUNT(*) FROM excel_data"))
+                return result.scalar()
+        except Exception as e:
+            logger.error(f"Error getting record count: {str(e)}")
+            return -1
 
     def table_exists(self) -> bool:
         """Check if excel_data table exists"""
@@ -173,19 +201,57 @@ def main():
             except Exception as e:
                 st.error(f"Error downloading data: {str(e)}")
     
+    if "confirm_reset_triggered" not in st.session_state:
+        st.session_state.confirm_reset_triggered = False
+
+    if 'reset_clicked' not in st.session_state:
+        st.session_state.reset_clicked = False
+
+    # Reset database logic
     with col2:
-        if st.button("Reset Database"):
-            try:
-                if st.session_state.db_manager.table_exists():
-                    st.warning("This will delete all data. Are you sure?")
-                    if st.button("Confirm Reset", key='confirm_reset'):
-                        st.session_state.db_manager.reset_database()
-                        st.session_state.metadata = None
-                        st.success("Database reset successfully!")
+        # Display current record count
+        # current_count = st.session_state.db_manager.get_record_count()
+        # st.write(f"Current records: {current_count}")
+        
+        # First button toggles the reset_clicked state
+        if not st.session_state.reset_clicked:
+            if st.button("Reset Database"):
+                if current_count > 0:
+                    st.session_state.reset_clicked = True
                 else:
                     st.warning("No data to reset.")
-            except Exception as e:
-                st.error(f"Error resetting database: {str(e)}")
+        
+        # Show confirmation button only if reset was clicked
+        if st.session_state.reset_clicked:
+            st.warning(f"This will delete all {current_count} records. Are you sure?")
+            col2_1, col2_2 = st.columns(2)
+            
+            with col2_1:
+                if st.button("Yes, Reset"):
+                    try:
+                        # Attempt reset and verify
+                        success = st.session_state.db_manager.reset_database()
+                        new_count = st.session_state.db_manager.get_record_count()
+                        
+                        if success and new_count == 0:
+                            st.success(f"Database reset successfully! (Verified: {new_count} records remaining)")
+                            st.session_state.metadata = None
+                        else:
+                            st.error(f"Reset may have failed. Records remaining: {new_count}")
+                        
+                        st.session_state.reset_clicked = False
+                        
+                        # Force page rerun to update all components
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error resetting database: {str(e)}")
+                        st.session_state.reset_clicked = False
+            
+            with col2_2:
+                if st.button("Cancel"):
+                    st.session_state.reset_clicked = False
+                    st.rerun()
     
     if uploaded_files and st.button("File Upload", key='process_files'):
         if uploaded_files:            
