@@ -87,15 +87,14 @@ class DatabaseManager:
             raise
             
     def reset_database(self) -> None:
-        """Delete all records from excel_data table"""
-        try:
-            with self.engine.connect() as connection:
-                connection.execute(text("TRUNCATE TABLE excel_data CASCADE"))
-                connection.commit()
-            logger.info("Table excel_data reset successfully")
-        except Exception as e:
-            logger.error(f"Error resetting database: {str(e)}")
-            raise
+    """Delete all records from excel_data table"""
+    try:
+        with self.engine.connect().execution_options(autocommit=True) as connection:
+            connection.execute(text("TRUNCATE TABLE excel_data CASCADE"))
+        logger.info("Table excel_data reset successfully")
+    except Exception as e:
+        logger.error(f"Error resetting database: {str(e)}")
+        raise
 
     def table_exists(self) -> bool:
         """Check if excel_data table exists"""
