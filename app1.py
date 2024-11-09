@@ -330,28 +330,37 @@ def main():
     if "confirm_reset_triggered" not in st.session_state:
         st.session_state.confirm_reset_triggered = False
 
+    if 'reset_clicked' not in st.session_state:
+        st.session_state.reset_clicked = False
+
     # Reset database logic
     with col2:
-        # Step 1: Initial "Reset Database" button
-        if st.button("Reset Database"):
-            st.session_state.confirm_reset_triggered = True  # Set the custom flag
+        if not st.session_state.reset_clicked:
+            if st.button("Reset Database"):
+                if st.session_state.db_manager.table_exists():
+                    st.session_state.reset_clicked = True
+                else:
+                    st.warning("No data to reset.")
+        
+        # Show confirmation button only if reset was clicked
+        if st.session_state.reset_clicked:
             st.warning("This will delete all data. Are you sure?")
-
-        # Step 2: Display "Confirm Reset" button if reset has been triggered
-        if st.session_state.confirm_reset_triggered:
-            if st.button("Confirm Reset"):
-                try:
-                    if st.session_state.db_manager.table_exists():
+            col2_1, col2_2 = st.columns(2)
+            
+            with col2_1:
+                if st.button("Yes, Reset"):
+                    try:
                         st.session_state.db_manager.reset_database()
                         st.session_state.metadata = None
                         st.success("Database reset successfully!")
-                    else:
-                        st.warning("No data to reset.")
-                except Exception as e:
-                    st.error(f"Error resetting database: {str(e)}")
-                finally:
-                    # Reset the confirmation flag
-                    st.session_state.confirm_reset_triggered = False
+                        st.session_state.reset_clicked = False  # Reset the state
+                    except Exception as e:
+                        st.error(f"Error resetting database: {str(e)}")
+                        st.session_state.reset_clicked = False  # Reset the state
+            
+            with col2_2:
+                if st.button("Cancel"):
+                    st.session_state.reset_clicked = False  # Reset the state
 
     # Process uploaded files
     if uploaded_files and st.button("Process Files", key='process_files'):
