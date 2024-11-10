@@ -327,7 +327,7 @@ def main():
             ```
             Thought: Do I need to use a tool? Yes
             Action: the action to take, should be one of [{tool_names}]
-            Action Input: the input to the action
+            Action Input: the input to the action (no additional text)
             Observation: the result of the action
             ```
             When you have a response to say to the Human, or if you do not need to use a tool, you MUST use the format:
