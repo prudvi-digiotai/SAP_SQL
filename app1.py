@@ -536,7 +536,7 @@ def main():
 
         ```
 
-        Begin! Remember to maintain this exact format for all interactions and focus on writing clean, error-free SQL queries.
+        Begin! Remember to maintain this exact format for all interactions and focus on writing clean, error-free SQL queries. Make sure to provide Final Answer to user's question.
 
         Previous conversation history:
         {chat_history}
