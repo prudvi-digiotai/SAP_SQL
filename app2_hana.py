@@ -7,7 +7,6 @@ from pathlib import Path
 import datetime
 
 from sqlalchemy import create_engine, text
-from sympy import Q
 import streamlit as st
 import pandas as pd
 from hdbcli import dbapi
