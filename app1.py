@@ -20,6 +20,9 @@ from openai import OpenAI
 import uuid
 import io
 
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -141,15 +144,6 @@ class RAGSystem:
         self.openai_client = OpenAI(api_key=api_key)
         self.qdrant_client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
         self.collection_name = collection_name
-        
-        # Create collection if it doesn't exist
-        # all_collections = [col.name for col in self.qdrant_client.get_collections().collections]
-        if self.qdrant_client.collection_exists(self.collection_name):
-            self.qdrant_client.delete_collection(collection_name=self.collection_name)
-        self.qdrant_client.create_collection(
-            collection_name=self.collection_name,
-            vectors_config=models.VectorParams(size=384, distance=models.Distance.COSINE),
-        )
 
     def extract_columns_from_excel(
         self, 
@@ -278,9 +272,6 @@ def initialize_session_state():
         st.session_state.messages = []
     if 'metadata' not in st.session_state:
         st.session_state.metadata = None
-    if 'authenticated_email' not in st.session_state:
-        st.session_state.authenticated_email = False
-
 
 def process_file(
     file_path: str,
@@ -304,11 +295,13 @@ def process_file(
         db_manager.store_dataframe(file_path, if_exists='append')
     else:
         db_manager.store_dataframe(file_path, if_exists='replace')
+    
+    st.session_state.metadata = db_manager.get_metadata()
 
 
 def main():
-    st.set_page_config(page_title="Enhanced RAG + SQL System", layout="wide")
-    st.title("Enhanced :blue[SQL with RAG Agentic] System")
+    st.set_page_config(page_title="Enhanced RAG + SQL System", layout="centered")
+    st.title("Enhanced :blue[SQL Agentic] System")
     
     initialize_session_state()
     
@@ -321,8 +314,6 @@ def main():
         st.session_state.rag_system = RAGSystem(api_key, qdrant_url, qdrant_api)
     if 'db_manager' not in st.session_state:
         st.session_state.db_manager = DatabaseManager(database_url)
-
-    st.session_state.metadata = st.session_state.db_manager.get_metadata()
 
     # File upload section
     uploaded_files = st.file_uploader(
@@ -386,6 +377,7 @@ def main():
                         # Attempt reset and verify
                         success = st.session_state.db_manager.reset_database()
                         new_count = st.session_state.db_manager.get_record_count()
+                        print(success, "        ", new_count)
                         
                         if success and new_count == 0:
                             st.success(f"Database reset successfully! (Verified: {new_count} records remaining)")
@@ -430,6 +422,8 @@ def main():
     # Initialize chat components
     if 'memory' not in st.session_state:
         st.session_state.memory = ConversationBufferWindowMemory(
+            ai_prefix="Assistant",
+            human_prefix="User",
             return_messages=True, 
             memory_key='chat_history', 
             input_key='input', 
@@ -439,7 +433,7 @@ def main():
     if 'llm' not in st.session_state:
         st.session_state.llm = ChatOpenAI(
             model="gpt-4o-mini", 
-            temperature=0.7, 
+            temperature=0.2, 
             api_key=api_key
         )
 
@@ -483,7 +477,7 @@ def main():
         ```
         Thought: Do I need to use a tool? Yes
         Action: the action to take, should be one of [{tool_names}]
-        Action Input: the input to the action
+        Action Input: the input to the action (no additional text)
         Observation: the result of the action
         ```
         When you have a response to say to the Human, or if you do not need to use a tool, you MUST use the format:
@@ -542,7 +536,7 @@ def main():
 
         ```
 
-        Begin!
+        Begin! Remember to maintain this exact format for all interactions and focus on writing clean, error-free SQL queries.
 
         Previous conversation history:
         {chat_history}
@@ -554,9 +548,9 @@ def main():
         st.session_state['agent_executor'] = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True, memory=st.session_state.memory)
 
     # Chat interface
-    query = st.text_area("Enter your question", height=100)
+    query = st.chat_input("Enter your question")
     
-    if st.button("Process"):
+    if query:
         if query:
             with st.spinner("Processing query..."):
                 # Store user message
@@ -568,6 +562,7 @@ def main():
                 # Generate context for the agent
                 command = f"""
                     Answer the queries from the excel_data table:
+                    
                     Metadata of the table:
                     {st.session_state.metadata} 
 
@@ -582,18 +577,12 @@ def main():
                     "content": response['output']
                 })
                 
-                with st.chat_message("assistant"):
-                    st.write(response['output'].strip())
-                    # st.write(response)
         else:
             st.warning("Please enter a question.")
     
-    # Display chat history in sidebar
-    with st.sidebar:
-        st.header("Chat History")
-        for msg in st.session_state.messages:
-            with st.expander(f"{msg['role']} message"):
-                st.write(msg['content'])
+    for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
 if __name__ == "__main__":
     main()
