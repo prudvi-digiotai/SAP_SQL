@@ -1,4 +1,5 @@
 from datetime import datetime
+from json import load
 import os
 import io
 import logging
@@ -14,6 +15,9 @@ from langchain.agents import AgentExecutor, create_react_agent
 from langchain.memory import ConversationBufferWindowMemory
 from langchain_openai import ChatOpenAI
 from langchain.tools.base import Tool
+
+from dotenv import load_dotenv
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -147,10 +151,8 @@ def process_file(
     else:
         db_manager.store_dataframe(file_path, if_exists='replace')
     
-    # st.session_state.metadata = db_manager.get_metadata()
-
 def main():
-    st.set_page_config(page_title="Enhanced RAG + SQL + Email System", layout="wide")
+    st.set_page_config(page_title="Enhanced RAG + SQL + Email System", layout="centered")
     st.title("Enhanced :blue[SQL Agentic] System")
     
     initialize_session_state()
@@ -159,8 +161,8 @@ def main():
     question_column = None
     answer_column = None
 
-    # from dotenv import load_dotenv
-    # load_dotenv()
+    from dotenv import load_dotenv
+    load_dotenv()
     
     api_key = os.getenv('OPENAI_API_KEY')
 
@@ -232,6 +234,7 @@ def main():
                         # Attempt reset and verify
                         success = st.session_state.db_manager.reset_database()
                         new_count = st.session_state.db_manager.get_record_count()
+                        print(success, "        ", new_count)
                         
                         if success and new_count == 0:
                             st.success(f"Database reset successfully! (Verified: {new_count} records remaining)")
@@ -281,6 +284,8 @@ def main():
         # Initialize RAG tools and agent if not already done
         if 'memory' not in st.session_state:
             st.session_state.memory = ConversationBufferWindowMemory(
+                ai_prefix="Assistant",
+                human_prefix="User",
                 return_messages=True, 
                 memory_key='chat_history', 
                 input_key='input', 
@@ -290,7 +295,7 @@ def main():
         if 'llm' not in st.session_state:
             st.session_state.llm = ChatOpenAI(
                 model="gpt-4o-mini", 
-                temperature=0.7, 
+                temperature=0.2, 
                 api_key=api_key
             )
 
@@ -312,6 +317,8 @@ def main():
             Assistant is designed to be able to assist with a wide range of tasks, from answering simple questions to providing in-depth explanations and discussions on a wide range of topics. As a language model, Assistant is able to generate human-like text based on the input it receives, allowing it to engage in natural-sounding conversations and provide responses that are coherent and relevant to the topic at hand.
 
             Assistant is constantly learning and improving, and its capabilities are constantly evolving. It is able to process and understand large amounts of text, and can use this knowledge to provide accurate and informative responses to a wide range of questions. Additionally, Assistant is able to generate its own text based on the input it receives, allowing it to engage in discussions and provide explanations and descriptions on a wide range of topics.
+
+            Assistant always with responds with one of ('Thought', 'Action', 'Action Input', 'Observation', 'Final Answer')
 
             Overall, Assistant is a powerful tool that can help with a wide range of tasks and provide valuable insights and information on a wide range of topics. Whether you need help with a specific question or just want to have a conversation about a particular topic, Assistant is here to assist.
 
@@ -365,7 +372,7 @@ def main():
 
             ```
 
-            Begin!
+            Begin! Remember to maintain this exact format for all interactions and focus on writing clean, error-free SQL queries. Make sure to provide Final Answer to user's question.
 
             Previous conversation history:
             {chat_history}
@@ -377,9 +384,9 @@ def main():
             st.session_state['agent_executor'] = AgentExecutor(agent=agent, tools=tools, verbose=True, handle_parsing_errors=True, memory=st.session_state.memory)
 
         # Chat interface
-        query = st.text_area("Enter your question", height=100)
+        query = st.chat_input("Enter your question")
         
-        if st.button("Process"):
+        if query:
             if query:
                 with st.spinner("Processing query..."):
                     # Store user message
@@ -403,22 +410,15 @@ def main():
                     # Store assistant message
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": response['output']
+                        "content": response['output'].strip('```')
                     })
                     
-                    # Display message
-                    with st.chat_message("assistant"):
-                        st.write(response['output'].strip())
-                        # st.write(response)
             else:
                 st.warning("Please enter a question.")
         
-        # Display chat history in sidebar
-        with st.sidebar:
-            st.header("Chat History")
-            for msg in st.session_state.messages:
-                with st.expander(f"{msg['role']} message"):
-                    st.write(msg['content'])
+        for message in st.session_state.messages:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
 
 if __name__ == "__main__":
     main()
