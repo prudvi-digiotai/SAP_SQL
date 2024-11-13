@@ -7,3 +7,4 @@ openai
 qdrant-client
 psycopg2-binary
 openpyxl
+python-dotenv
