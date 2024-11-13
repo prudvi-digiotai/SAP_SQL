@@ -574,7 +574,7 @@ def main():
                 
                 st.session_state.messages.append({
                     "role": "assistant",
-                    "content": response['output']
+                    "content": response['output'].strip("```")
                 })
                 
         else:
